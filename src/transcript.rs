@@ -252,10 +252,46 @@ pub fn print_human_result(t: &Transcript) {
         }
         Decision::Fail => {
             eprintln!("aigit: FAIL (score {:.2})", t.score.total_score);
+            if t.score.total_score < t.thresholds.min_total_score {
+                eprintln!(
+                    "aigit: reason: total_score {:.2} < min_total_score {:.2}",
+                    t.score.total_score, t.thresholds.min_total_score
+                );
+            }
+            if (t.score.hallucination_flags.len() as u32) > t.thresholds.max_hallucination_flags {
+                eprintln!(
+                    "aigit: reason: hallucination_flags {} > max {}",
+                    t.score.hallucination_flags.len(),
+                    t.thresholds.max_hallucination_flags
+                );
+            }
+            if !t.thresholds.required_categories.is_empty() {
+                for cat in &t.thresholds.required_categories {
+                    let ok = t
+                        .exam
+                        .questions
+                        .iter()
+                        .filter(|q| q.category == *cat)
+                        .all(|q| t.answers.get(&q.id).unwrap_or("").trim().len() > 0);
+                    if !ok {
+                        eprintln!("aigit: reason: missing required category answer: {cat}");
+                    }
+                }
+            }
             if !t.score.hallucination_flags.is_empty() {
                 eprintln!("aigit: hallucination flags:");
                 for f in &t.score.hallucination_flags {
                     eprintln!("  - {f}");
+                }
+            }
+            eprintln!("aigit: score breakdown:");
+            for q in &t.score.per_question {
+                eprintln!(
+                    "  - {} [{}]: score {:.2} (completeness {:.2}, specificity {:.2})",
+                    q.id, q.category, q.score, q.completeness, q.specificity
+                );
+                for n in &q.notes {
+                    eprintln!("      - {n}");
                 }
             }
         }

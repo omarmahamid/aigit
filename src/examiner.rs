@@ -7,6 +7,12 @@ use crate::git::Git;
 use crate::redact::RedactionHit;
 use crate::transcript::{Answers, Score};
 
+const KEYWORDS_RISK: &[&str] = &["risk", "break", "fail", "regress", "error", "panic"];
+const KEYWORDS_TESTING: &[&str] = &["test", "cargo test", "unit", "integration", "ci"];
+const KEYWORDS_ROLLBACK: &[&str] = &["revert", "rollback", "backout", "feature flag", "mitigate"];
+const KEYWORDS_SECURITY: &[&str] = &["auth", "authz", "pii", "secret", "token", "key", "encrypt"];
+const KEYWORDS_DEFAULT: &[&str] = &["file", "module", "function", "line"];
+
 #[derive(Debug, Clone)]
 pub struct ExamContext {
     pub repo_id: String,
@@ -173,41 +179,48 @@ impl Examiner for StaticExaminer {
 
         for q in &exam.questions {
             let answer = answers.get(&q.id).unwrap_or_default().trim().to_string();
+            let mut notes = Vec::new();
             let completeness = if answer.is_empty() { 0.0 } else { 1.0 };
+            if completeness == 0.0 {
+                notes.push("empty answer".to_string());
+            }
 
             let mentions_changed_file = ctx
                 .changed_files
                 .iter()
                 .any(|f| !f.is_empty() && answer.contains(f));
+            if completeness > 0.0 && !mentions_changed_file && !ctx.changed_files.is_empty() {
+                notes.push("does not mention any changed file path".to_string());
+            }
+
+            let word_count = answer.split_whitespace().count();
+            if completeness > 0.0 && word_count < 20 {
+                notes.push(format!("answer is short ({word_count} words)"));
+            }
             let specificity = if answer.is_empty() {
                 0.0
             } else if mentions_changed_file {
                 1.0
-            } else if answer.split_whitespace().count() >= 20 {
+            } else if word_count >= 20 {
                 0.6
             } else {
                 0.3
             };
 
-            let category_bonus = match q.category.as_str() {
-                "risk" => keyword_score(
-                    &answer,
-                    &["risk", "break", "fail", "regress", "error", "panic"],
-                ),
-                "testing" => keyword_score(
-                    &answer,
-                    &["test", "cargo test", "unit", "integration", "ci"],
-                ),
-                "rollback" => keyword_score(
-                    &answer,
-                    &["revert", "rollback", "backout", "feature flag", "mitigate"],
-                ),
-                "security" => keyword_score(
-                    &answer,
-                    &["auth", "authz", "pii", "secret", "token", "key", "encrypt"],
-                ),
-                _ => keyword_score(&answer, &["file", "module", "function", "line"]),
+            let expected_keywords = match q.category.as_str() {
+                "risk" => KEYWORDS_RISK,
+                "testing" => KEYWORDS_TESTING,
+                "rollback" => KEYWORDS_ROLLBACK,
+                "security" => KEYWORDS_SECURITY,
+                _ => KEYWORDS_DEFAULT,
             };
+            let category_bonus = keyword_score(&answer, expected_keywords);
+            if completeness > 0.0 && category_bonus <= 0.2 {
+                notes.push(format!(
+                    "missing category signals (look for: {})",
+                    expected_keywords.join(", ")
+                ));
+            }
 
             if completeness > 0.0 {
                 // very conservative "hallucination": explicit file paths not in changed set
@@ -228,7 +241,7 @@ impl Examiner for StaticExaminer {
                 score,
                 completeness,
                 specificity,
-                notes: Vec::new(),
+                notes,
             });
         }
 
