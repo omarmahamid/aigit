@@ -1,0 +1,316 @@
+= aigit: Proof-of-Understanding Commit Protocol
+:toc:
+:toclevels: 3
+
+== 1. Purpose
+
+The goal of *aigit* is to prevent low-quality, non-understood, or purely agent-generated commits from entering the codebase.
+
+The system introduces a mandatory *Proof-of-Understanding (PoU)* exam that must be passed before a commit is allowed to proceed.
+
+This tool is intentionally designed to add *cognitive friction* to the commit process, especially for AI agents, while remaining usable for humans.
+
+== 2. Scope
+
+This document defines product requirements for implementing *aigit* as:
+
+* A git-like CLI tool
+* An exam generation + grading engine (pluggable)
+* An auditable transcript and verification mechanism
+* Optional enforcement via git hooks and/or CI
+
+== 3. Definitions
+
+*PoU (Proof-of-Understanding)*::
+An interactive (or scripted) evaluation that verifies the committing entity can explain what was changed, why, risks, and rollback strategy.
+
+*Exam transcript*::
+Structured record of questions, answers, scores, model/provider metadata, and final decision (pass/fail).
+
+*Committing entity*::
+Either a human developer or an AI agent acting on behalf of a human.
+
+== 4. Goals and Non-Goals
+
+=== 4.1 Goals
+
+* Block commits that cannot be justified/explained.
+* Produce a reproducible audit trail (transcript) tied to each commit.
+* Keep the workflow familiar (git-like UX).
+* Be provider-agnostic (OpenAI/Anthropic/local model).
+* Support offline / local operation where possible.
+
+=== 4.2 Non-Goals
+
+* Replace code review.
+* Guarantee correctness of code; this validates understanding, not truth.
+* Modify git internals/history.
+* Enforce a single “best” model/provider.
+
+== 5. User Stories
+
+. As a developer, I want `aigit commit` to feel like `git commit` but prevent low-quality commits.
+. As a team lead, I want CI to fail if a commit lacks a valid PoU transcript.
+. As an AI agent, I want a stable protocol so I can answer exams reliably.
+. As a security-minded org, I want transcripts stored locally and redactable.
+
+== 6. Functional Requirements
+
+=== 6.1 CLI Commands
+
+The system MUST provide a git-like CLI interface.
+
+Required commands:
+
+* `aigit commit [-m <msg>] [-- <git commit args...>]`
+* `aigit exam [--staged | --range <A..B>] [--format json|tui]`
+* `aigit verify <commit-ish>`
+
+Recommended commands:
+
+* `aigit install-hook [--mode pre-commit|prepare-commit-msg|commit-msg]`
+* `aigit policy validate`
+* `aigit config set <key> <value>`
+
+Exit codes:
+
+* `0` success (commit performed / exam passed / verify passed)
+* `1` user error (bad args, missing git repo)
+* `2` exam failed (blocked)
+* `3` infra/provider error (network/model unavailable)
+* `4` policy violation (missing transcript, schema mismatch)
+
+=== 6.2 Git Integration
+
+The system MUST:
+
+* Read staged changes (`git diff --staged`) by default.
+* Respect `.gitignore` (do not include ignored files in analysis).
+* Preserve native git behavior after passing (delegates to `git commit` or uses libgit2).
+* Support commit messages from `-m` and editor flow.
+
+The system MUST NOT:
+
+* Rewrite commit history.
+* Auto-stage files without explicit user action.
+* Modify non-staged content.
+
+=== 6.3 Exam Lifecycle
+
+Before creating a commit, the system MUST:
+
+. Collect context:
+.. Staged diff
+.. File list + change stats
+.. Optional: test results, build output (if provided)
+.. Optional: policy config (.aigit.toml)
+. Generate an exam tailored to the diff.
+. Present exam to committing entity (TUI or stdin/stdout JSON mode).
+. Grade answers against a rubric.
+. Decide pass/fail.
+. If pass: proceed with commit.
+. Persist transcript and link it to the resulting commit.
+
+If exam fails, the system MUST:
+
+* Block the commit.
+* Provide a clear failure reason and score breakdown.
+* Optionally provide “study hints” (what was missing).
+
+=== 6.4 Exam Requirements (Question Categories)
+
+Minimum required categories (configurable by policy):
+
+* Change summary:
+** What changed (files/modules) and why?
+* Intent and requirements:
+** What user/business requirement does this satisfy?
+* Invariants and assumptions:
+** What assumptions does this change rely on?
+** What invariants must remain true?
+* Risk and blast radius:
+** What could break? Where would issues surface first?
+* Testing:
+** What tests were run? Which should exist? What coverage is missing?
+* Rollback / mitigation:
+** How to revert or feature-flag? What is the rollback plan?
+* Alternatives:
+** What alternative approach was considered and why rejected?
+* Security/privacy (if relevant):
+** Any data access changes? Auth/authz? PII? Secrets?
+
+=== 6.5 Grading and Rubric
+
+The system MUST implement a deterministic scoring model over structured criteria.
+
+Minimum rubric fields:
+
+* Completeness (answered all required questions)
+* Specificity (references concrete files/functions/behaviors, not vague language)
+* Consistency (answers align with diff content)
+* Risk awareness (mentions failure modes and mitigations)
+* Test awareness (ties changes to tests; identifies gaps)
+
+The system MUST support policy-defined thresholds, e.g.:
+
+* `min_total_score = 0.75`
+* `required_categories = ["risk", "rollback", "testing"]`
+* `max_hallucination_flags = 0`
+
+Hallucination detection:
+
+* The grader MUST flag claims not supported by diff context (e.g., “added caching layer” when none exists).
+* A configurable number of hallucination flags SHOULD fail the exam.
+
+=== 6.6 Transcript and Audit Trail
+
+The system MUST produce a transcript containing:
+
+* Commit-ish (hash once committed; pre-commit temporary id otherwise)
+* Timestamp
+* Repo identifier (remote URL or sanitized fingerprint)
+* Diff fingerprint (e.g., patch-id)
+* Exam questions (with ids and categories)
+* Answers
+* Score breakdown per category
+* Pass/fail decision and thresholds
+* Provider metadata:
+** model name/version
+** prompt version
+** temperature/seed where applicable
+* Redaction status (if secrets redacted)
+
+Storage options (must support at least one, ideally two):
+
+* Git notes (preferred for portability)
+* Local SQLite store in `.git/aigit.db` or `$XDG_DATA_HOME/aigit/...`
+
+`aigit verify <commit>` MUST:
+
+* Locate transcript (notes/db)
+* Validate schema
+* Validate that transcript diff fingerprint matches commit’s diff (or patch-id)
+* Recompute verify-only checks (policy thresholds)
+* Return pass/fail and reasons
+
+=== 6.7 Policy Configuration
+
+The system SHOULD support repository-level configuration via `.aigit.toml`.
+
+Config fields (proposed):
+
+* `min_total_score`
+* `required_categories`
+* `provider` (openai/anthropic/ollama/custom)
+* `model`
+* `exam_mode` (tui/json)
+* `store` (git-notes/sqlite/both)
+* `redactions` (patterns to remove from diff context)
+* `max_tokens_context`
+* `hooks.enforce = true|false`
+* `codex_cli.*` (when `provider = "codex-cli"`)
+
+Codex CLI provider:
+
+* Set `provider = "codex-cli"` to grade exams via `codex exec` (non-interactive).
+* Configure with:
+** `codex_cli.command` (base command; e.g. `codex` or `npx -y @openai/codex@0.75.0`)
+** `codex_cli.profile` (optional; from `~/.codex/config.toml`)
+** `codex_cli.model` (optional; overrides `model`)
+** `codex_cli.sandbox` (optional; default `read-only`)
+** `codex_cli.timeout_secs` (optional; default 120)
+
+The system MUST provide sane defaults if config is missing.
+
+=== 6.8 Provider/Model Abstraction
+
+The system MUST be provider-agnostic:
+
+* Define an `Examiner` interface:
+** `generate_exam(context) -> Exam`
+** `grade_exam(context, exam, answers) -> Score`
+* Implement at least one provider adapter.
+* Allow adding providers without changing core protocol.
+
+Offline/local mode:
+
+* SHOULD support Ollama/llama.cpp HTTP endpoints.
+* MUST degrade gracefully if provider is unavailable (exit code 3).
+
+=== 6.9 Security, Privacy, and Redaction
+
+The system MUST:
+
+* Avoid sending secrets to providers by default.
+* Provide redaction for:
+** dotenv patterns
+** API keys
+** private keys
+** tokens
+* Allow disabling network calls (offline-only policy).
+* Clearly indicate what data is sent to a remote model.
+
+The system SHOULD:
+
+* Support a “local-only” mode which refuses remote providers.
+
+== 7. Non-Functional Requirements
+
+=== 7.1 Performance
+
+* Default exam generation + grading SHOULD complete within 3–10 seconds for typical diffs.
+* Must handle large diffs by truncating/summarizing context deterministically.
+
+=== 7.2 Reliability
+
+* Fail closed: if exam cannot be executed when policy requires it, block the commit (exit code 3/4).
+* Provide clear remediation steps.
+
+=== 7.3 Usability
+
+* Should feel like git:
+** supports `-m`, editor flow, and passthrough args
+* Supports both interactive TUI and non-interactive JSON for CI.
+
+=== 7.4 Observability
+
+* Verbose mode for debugging: `--verbose`
+* Optional structured logs: `--log-format json`
+
+== 8. Acceptance Criteria
+
+A commit MUST be blocked if:
+
+* Required exam categories are missing/unanswered.
+* Total score < policy threshold.
+* Hallucination flags exceed policy threshold.
+* Transcript cannot be stored/linked when policy requires audit.
+
+A commit MUST proceed if:
+
+* Exam passes rubric thresholds.
+* Transcript is persisted and linked to the resulting commit.
+
+`aigit verify` MUST fail if:
+
+* No transcript exists for the commit.
+* Transcript schema invalid.
+* Diff fingerprint mismatch.
+
+== 9. MVP Deliverables
+
+MVP (v0.1) includes:
+
+* `aigit commit`, `aigit exam`, `aigit verify`
+* Staged diff ingestion
+* Fixed set of exam questions + grading rubric
+* One provider adapter (remote or local)
+* Transcript persistence (git notes OR sqlite)
+* `.aigit.toml` minimal policy support
+
+== 10. Open Questions
+
+* Should the transcript be stored by default in git notes, sqlite, or both?
+* How strict should hallucination detection be for humans vs agents?
+* What is the standard for diff fingerprinting (patch-id vs hash of canonical diff)?
+* Should CI require `aigit verify` for merges to main?
