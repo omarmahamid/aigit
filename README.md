@@ -4,6 +4,14 @@
 
 Product requirements live in `docs/aigit.adoc`.
 
+## Quickstart (day-to-day)
+
+- Make a change (bugfix/refactor/etc.)
+- Stage it: `git add -A`
+- Commit via aigit: `aigit commit -m "your message"`
+- Answer the prompts (end each answer with a line containing just `.`)
+- (Optional) Verify later: `aigit verify HEAD`
+
 ## MVP commands
 
 - `aigit exam` (default: staged diff; `--format tui|json`)
@@ -31,7 +39,21 @@ cargo install --path .
 
 ## Using Codex CLI as the grader
 
-Set `provider = "codex-cli"` in `.aigit.toml` to grade answers via `codex exec` (non-interactive).
+- Install Codex CLI (`codex`) and login (so `codex exec "hello"` works).
+- In your repo, create `.aigit.toml`:
+
+```toml
+provider = "codex-cli"
+
+[codex_cli]
+command = "codex" # or: "npx -y @openai/codex@0.75.0"
+sandbox = "read-only"
+timeout_secs = 120
+```
+
+- Use it normally:
+  - `git add -A`
+  - `aigit commit -m "message"`
 
 ## Hook (optional)
 
