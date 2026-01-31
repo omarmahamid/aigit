@@ -271,3 +271,47 @@ fn verify_passes_with_matching_transcript_note() {
         .success()
         .stdout(predicate::str::contains("PASS"));
 }
+
+#[test]
+fn policy_validate_succeeds() {
+    let dir = tmp_repo();
+    git(&dir, &["init"]);
+
+    let mut cmd = assert_cmd::Command::new(assert_cmd::cargo::cargo_bin!("aigit"));
+    cmd.current_dir(&dir).args(["policy", "validate"]);
+    cmd.assert().success();
+}
+
+#[test]
+fn config_set_writes_policy_file() {
+    let dir = tmp_repo();
+    git(&dir, &["init"]);
+
+    let mut cmd = assert_cmd::Command::new(assert_cmd::cargo::cargo_bin!("aigit"));
+    cmd.current_dir(&dir)
+        .args(["config", "set", "exam_mode", "json"]);
+    cmd.assert().success();
+
+    let raw = fs::read_to_string(dir.join(".aigit.toml")).unwrap();
+    assert!(
+        raw.contains("exam_mode = \"json\""),
+        "expected exam_mode in .aigit.toml, got:\n{raw}"
+    );
+}
+
+#[test]
+fn install_hook_creates_pre_commit_hook() {
+    let dir = tmp_repo();
+    git(&dir, &["init"]);
+
+    let mut cmd = assert_cmd::Command::new(assert_cmd::cargo::cargo_bin!("aigit"));
+    cmd.current_dir(&dir).args(["install-hook"]);
+    cmd.assert().success();
+
+    let hook_path = dir.join(".git").join("hooks").join("pre-commit");
+    let raw = fs::read_to_string(&hook_path).unwrap();
+    assert!(
+        raw.contains("aigit: commit blocked"),
+        "expected pre-commit hook content, got:\n{raw}"
+    );
+}
