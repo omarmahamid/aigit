@@ -1,0 +1,6 @@
+  provider = "codex-cli"
+
+  [codex_cli]
+  command = "codex" # or: "npx -y @openai/codex@0.93.0"
+  sandbox = "read-only"
+  timeout_secs = 160

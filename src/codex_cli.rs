@@ -233,13 +233,15 @@ fn exam_schema_json() -> serde_json::Value {
                 "items": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": ["id", "category", "prompt"],
+                    // OpenAI/Codex schema validation requires `required` to list every key in `properties`.
+                    // So `choices` is required but may be null for open-ended questions.
+                    "required": ["id", "category", "prompt", "choices"],
                     "properties": {
                         "id": { "type": "string" },
                         "category": { "type": "string" },
                         "prompt": { "type": "string" },
                         "choices": {
-                            "type": "array",
+                            "type": ["array", "null"],
                             "minItems": 2,
                             "maxItems": 6,
                             "items": { "type": "string" }
