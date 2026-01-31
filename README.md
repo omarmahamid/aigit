@@ -31,15 +31,15 @@ Product requirements live in `docs/aigit.adoc`.
 ```mermaid
 flowchart LR
   U[User / Agent] -->|runs| CLI[aigit CLI]
-  CLI -->|reads| GIT[git repo\n(staged diff / range)]
-  CLI -->|builds| CTX[ExamContext\n(diff_redacted, changed_files,\npatch-id, policy)]
-  CLI -->|generate_exam| EX[Examiner\n(local or codex-cli)]
-  EX --> EXAM[Exam\n(questions + optional choices)]
+  CLI -->|reads| GIT[git repo\n staged diff / range]
+  CLI -->|builds| CTX[ExamContext\n diff_redacted, changed_files,\npatch-id, policy]
+  CLI -->|generate_exam| EX[Examiner\n local or codex-cli]
+  EX --> EXAM[Exam\n questions + optional choices]
   CLI -->|collect answers| TUI[TUI / JSON answers]
   TUI --> ANS[Answers]
   CLI -->|grade_exam| EX
-  EX --> SCORE[Score\n(per-question + flags)]
-  CLI --> DEC[Decision\n(pass/fail)]
+  EX --> SCORE[Score\n per-question + flags]
+  CLI --> DEC[Decision\n pass/fail]
   DEC -->|PASS| GC[git commit]
   DEC -->|FAIL| STOP[block commit]
   CLI -->|store transcript| NOTES[git notes\nref=aigit]
