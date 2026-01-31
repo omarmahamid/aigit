@@ -7,7 +7,7 @@ use wait_timeout::ChildExt;
 
 use crate::config::{CodexCliPolicy, Policy};
 
-pub const VIBE_KANBAN_DEFAULT_CODEX_BASE_COMMAND: &str = "npx -y @openai/codex@0.75.0";
+pub const NPX_OPENAI_DOWNLOAD: &str = "npx -y @openai/codex@0.93.0";
 
 #[derive(Debug, Clone)]
 pub struct CodexCliRunner {
@@ -104,7 +104,7 @@ impl CodexCliRunner {
                 "failed to spawn Codex CLI: {} {} (hint: set `codex_cli.command` in .aigit.toml, e.g. \"{}\")",
                 program,
                 args.join(" "),
-                VIBE_KANBAN_DEFAULT_CODEX_BASE_COMMAND
+                NPX_OPENAI_DOWNLOAD
             )
         })?;
 
