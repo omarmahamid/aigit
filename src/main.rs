@@ -173,6 +173,22 @@ fn try_run() -> Result<u8> {
 
 fn cmd_exam(git: &Git, args: ExamArgs, verbose: bool) -> Result<u8> {
     let policy = Policy::load_from_repo(&git.repo)?;
+    if verbose {
+        let policy_path = git.repo.workdir.join(".aigit.toml");
+        eprintln!(
+            "aigit: policy file: {} ({})",
+            policy_path.display(),
+            if policy_path.exists() {
+                "present"
+            } else {
+                "missing (using defaults)"
+            }
+        );
+        eprintln!(
+            "aigit: provider: {}",
+            policy.provider.clone().unwrap_or_else(|| "local".to_string())
+        );
+    }
     let format = match args.format {
         Some(ExamFormat::Tui) => ExamFormat::Tui,
         Some(ExamFormat::Json) => ExamFormat::Json,
@@ -210,6 +226,15 @@ fn cmd_exam(git: &Git, args: ExamArgs, verbose: bool) -> Result<u8> {
         Some("codex-cli") => Box::new(CodexCliExaminer::new(&policy)),
         _ => Box::new(StaticExaminer::new()),
     };
+    if verbose {
+        eprintln!(
+            "aigit: examiner: {}",
+            match policy.provider.as_deref() {
+                Some("codex-cli") => "codex-cli",
+                _ => "local-static",
+            }
+        );
+    }
     let exam = examiner.generate_exam(&ctx)?;
 
     match format {
@@ -255,6 +280,22 @@ fn cmd_exam(git: &Git, args: ExamArgs, verbose: bool) -> Result<u8> {
 
 fn cmd_commit(git: &Git, args: CommitArgs, verbose: bool) -> Result<u8> {
     let policy = Policy::load_from_repo(&git.repo)?;
+    if verbose {
+        let policy_path = git.repo.workdir.join(".aigit.toml");
+        eprintln!(
+            "aigit: policy file: {} ({})",
+            policy_path.display(),
+            if policy_path.exists() {
+                "present"
+            } else {
+                "missing (using defaults)"
+            }
+        );
+        eprintln!(
+            "aigit: provider: {}",
+            policy.provider.clone().unwrap_or_else(|| "local".to_string())
+        );
+    }
     let (diff, changed_files) = git.diff_staged()?;
     if diff.trim().is_empty() {
         return Err(anyhow!("no staged changes to commit"));
@@ -275,6 +316,15 @@ fn cmd_commit(git: &Git, args: CommitArgs, verbose: bool) -> Result<u8> {
         Some("codex-cli") => Box::new(CodexCliExaminer::new(&policy)),
         _ => Box::new(StaticExaminer::new()),
     };
+    if verbose {
+        eprintln!(
+            "aigit: examiner: {}",
+            match policy.provider.as_deref() {
+                Some("codex-cli") => "codex-cli",
+                _ => "local-static",
+            }
+        );
+    }
     let exam = examiner.generate_exam(&ctx)?;
     let answers = transcript::Answers::prompt_tui(&exam)?;
     let score = examiner.grade_exam(&ctx, &exam, &answers)?;

@@ -285,6 +285,7 @@ impl Examiner for CodexCliExaminer {
         }
         // Basic sanity: unique ids.
         let mut ids = std::collections::BTreeSet::new();
+        let mut mcq_count = 0usize;
         for q in &exam.questions {
             if q.id.trim().is_empty() {
                 return Err(anyhow::anyhow!("codex exam question id is empty"));
@@ -295,6 +296,17 @@ impl Examiner for CodexCliExaminer {
                     q.id
                 ));
             }
+            if let Some(choices) = &q.choices {
+                if choices.len() == 4 {
+                    mcq_count += 1;
+                }
+            }
+        }
+        if mcq_count < 3 {
+            return Err(anyhow::anyhow!(
+                "codex exam must include at least 3 multiple-choice questions with exactly 4 choices (A-D); got {}",
+                mcq_count
+            ));
         }
         Ok(exam)
     }
@@ -403,15 +415,18 @@ fn extract_file_like_tokens(answer: &str) -> Vec<String> {
 fn build_codex_cli_judge_prompt(ctx: &ExamContext, exam: &Exam, answers: &Answers) -> String {
     let mut out = String::new();
     out.push_str("You are a strict grader for a git \"Proof-of-Understanding\" exam.\n");
-    out.push_str("Use ONLY the provided context; do not run commands, read files, or assume details not present.\n");
+    out.push_str("You may inspect repository files in a READ-ONLY manner if needed, but do not modify anything.\n");
     out.push_str("Return ONLY a JSON object matching the provided JSON Schema.\n\n");
 
     out.push_str("Grading rubric:\n");
     out.push_str("- completeness: 0..1 based on how well the answer addresses the question (0 if empty).\n");
     out.push_str("- specificity: 0..1 based on concrete references to what changed (files/functions/behaviors in the diff), not generic boilerplate.\n");
+    out.push_str("- for multiple-choice questions (choices present): treat answers like A/B/C/D (or matching choice text). Penalize if incorrect or ambiguous.\n");
+    out.push_str("- for multiple-choice questions, include the correct choice and a 1-sentence explanation in `notes`.\n");
     out.push_str("- score: 0..1 overall for the question; recommended weighting: 0.45*completeness + 0.45*specificity + 0.10*category_relevance.\n");
     out.push_str("- notes: short bullet-like strings explaining missing specifics or inaccuracies.\n");
-    out.push_str("- hallucination_flags: conservative flags for claims not supported by the diff (esp. files/modules not in changed_files).\n\n");
+    out.push_str("- hallucination_flags: conservative flags for claims not supported by the diff (esp. files/modules not in changed_files).\n");
+    out.push_str("- if an alternative approach exists, mention one in `notes` on the alternatives question and why it may not have been chosen.\n\n");
 
     out.push_str("changed_files:\n");
     for f in &ctx.changed_files {
@@ -440,14 +455,14 @@ fn build_codex_cli_judge_prompt(ctx: &ExamContext, exam: &Exam, answers: &Answer
 fn build_codex_cli_generate_exam_prompt(ctx: &ExamContext) -> String {
     let mut out = String::new();
     out.push_str("You generate a git \"Proof-of-Understanding\" exam tailored to a specific diff.\n");
-    out.push_str("Use ONLY the provided context; do not run commands, read files, or assume details not present.\n");
+    out.push_str("You may inspect repository files in a READ-ONLY manner if needed, but do not modify anything.\n");
     out.push_str("Return ONLY a JSON object matching the provided JSON Schema.\n\n");
 
     out.push_str("Requirements:\n");
     out.push_str("- 8 questions total (unless the diff is tiny; then >=4).\n");
     out.push_str("- Cover these categories at least once each: summary, intent, invariants, risk, testing, rollback, alternatives, security.\n");
     out.push_str("- Make questions diff-aware: mention concrete files/functions/behaviors present in the diff.\n");
-    out.push_str("- Include at least 3 multiple-choice questions by providing a `choices` array with 4 options.\n");
+    out.push_str("- Include at least 3 multiple-choice questions by providing a `choices` array with exactly 4 options (A-D).\n");
     out.push_str("- Multiple-choice questions should be answerable with A/B/C/D.\n");
     out.push_str("- At least one question should probe an alternative approach and ask why it was not chosen.\n\n");
 

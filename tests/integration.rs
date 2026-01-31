@@ -61,7 +61,7 @@ if grep -q '"title"[[:space:]]*:[[:space:]]*"aigit.Exam"' "$schema"; then
   "protocol_version": "aigit/0.1",
   "questions": [
     {{ "id": "change_summary", "category": "summary", "prompt": "What changed in hello.txt and why?" }},
-    {{ "id": "intent", "category": "intent", "prompt": "Which requirement does adding hello.txt satisfy?" }},
+    {{ "id": "intent", "category": "intent", "prompt": "Which requirement does adding hello.txt satisfy?", "choices": ["Create a baseline file in the repo", "Migrate the database", "Rotate auth keys", "Increase GPU utilization"] }},
     {{ "id": "invariants", "category": "invariants", "prompt": "Which invariant must remain true about hello.txt?", "choices": ["It stays plain text", "It becomes JSON", "It contains secrets", "It is deleted"] }},
     {{ "id": "risk", "category": "risk", "prompt": "What is the most likely risk of this change?", "choices": ["Break scripts reading initial content", "DB migration failure", "Auth outage", "GPU driver crash"] }},
     {{ "id": "testing", "category": "testing", "prompt": "What testing is appropriate here?" }},
