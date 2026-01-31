@@ -36,7 +36,6 @@ enum Commands {
     /// Run a PoU exam over changes (default: staged diff)
     Exam(ExamArgs),
     /// Run PoU exam then delegate to `git commit` if passed
-    #[command(trailing_var_arg = true)]
     Commit(CommitArgs),
     /// Verify that a commit has a valid PoU transcript
     Verify(VerifyArgs),
