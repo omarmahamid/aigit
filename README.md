@@ -12,6 +12,99 @@ Product requirements live in `docs/aigit.adoc`.
 - Answer the prompts (end each answer with a line containing just `.`)
 - (Optional) Verify later: `aigit verify HEAD`
 
+## Architecture
+
+### Key definitions
+
+- **PoU (Proof-of-Understanding)**: a short exam that proves the committer understands what changed and why (risks, testing, rollback, etc.).
+- **Exam**: a list of questions (some may be multiple-choice) generated for the current diff.
+- **Answers**: the committer’s responses (TUI or JSON mode).
+- **Score**: per-question scoring + flags used to decide pass/fail.
+- **Transcript**: an auditable record containing the exam, answers, score, and decision.
+- **Diff fingerprint**: a stable identifier for the diff (currently `git patch-id --stable`) to prevent “answer reuse” across different changes.
+- **Provider**: how we generate/grade exams:
+  - `local` = built-in static examiner (deterministic rubric)
+  - `codex-cli` = Codex CLI generates a diff-aware exam and grades answers
+
+### Components (high level)
+
+```mermaid
+flowchart LR
+  U[User / Agent] -->|runs| CLI[aigit CLI]
+  CLI -->|reads| GIT[git repo\n(staged diff / range)]
+  CLI -->|builds| CTX[ExamContext\n(diff_redacted, changed_files,\npatch-id, policy)]
+  CLI -->|generate_exam| EX[Examiner\n(local or codex-cli)]
+  EX --> EXAM[Exam\n(questions + optional choices)]
+  CLI -->|collect answers| TUI[TUI / JSON answers]
+  TUI --> ANS[Answers]
+  CLI -->|grade_exam| EX
+  EX --> SCORE[Score\n(per-question + flags)]
+  CLI --> DEC[Decision\n(pass/fail)]
+  DEC -->|PASS| GC[git commit]
+  DEC -->|FAIL| STOP[block commit]
+  CLI -->|store transcript| NOTES[git notes\nref=aigit]
+  CLI -->|verify| VERIFY[aigit verify]
+  VERIFY -->|loads notes + checks patch-id + thresholds| DEC
+```
+
+### Data flow (what gets stored)
+
+```mermaid
+flowchart TB
+  DIFF[Diff] --> PID[patch-id]
+  EXAM[Exam] --> TR[Transcript]
+  ANS[Answers] --> TR
+  SCORE[Score] --> TR
+  PID --> TR
+  TR --> NOTES[git notes ref=aigit]
+```
+
+## Flows
+
+### Flow: `aigit commit`
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant Aigit as aigit
+  participant Git as git
+  participant Examiner as Examiner (local / codex-cli)
+  participant Notes as git-notes (ref=aigit)
+
+  User->>Aigit: aigit commit -m "msg"
+  Aigit->>Git: git diff --staged (+ changed files)
+  Aigit->>Git: git patch-id --stable (fingerprint)
+  Aigit->>Examiner: generate_exam(ctx)
+  Examiner-->>Aigit: Exam (questions/choices)
+  Aigit-->>User: Ask questions (TUI) / or JSON mode
+  User-->>Aigit: Answers
+  Aigit->>Examiner: grade_exam(ctx, exam, answers)
+  Examiner-->>Aigit: Score (+ flags)
+  Aigit->>Aigit: Decision (policy thresholds)
+  alt PASS
+    Aigit->>Git: git commit ...
+    Aigit->>Notes: store Transcript (notes)
+    Aigit-->>User: PASS + stored transcript
+  else FAIL
+    Aigit-->>User: FAIL + reasons
+  end
+```
+
+### Flow: `aigit exam`
+
+- Builds context from **staged diff** (default) or `--range`.
+- Generates an exam:
+  - `local`: static questions
+  - `codex-cli`: diff-aware questions (may include multiple-choice)
+- Either prints the exam as JSON (`--format json` without `--answers`) or runs the TUI.
+
+### Flow: `aigit verify <commit>`
+
+- Loads the transcript from `git notes --ref=aigit` for the commit.
+- Recomputes the commit’s diff fingerprint and compares it to the transcript.
+- Re-checks policy thresholds (min score, required categories, max flags).
+- Prints PASS/FAIL.
+
 ## MVP commands
 
 - `aigit exam` (default: staged diff; `--format tui|json`)
