@@ -459,7 +459,7 @@ fn build_codex_cli_generate_exam_prompt(ctx: &ExamContext) -> String {
     out.push_str("Return ONLY a JSON object matching the provided JSON Schema.\n\n");
 
     out.push_str("Requirements:\n");
-    out.push_str("- 8 questions total (unless the diff is tiny; then >=4).\n");
+    out.push_str("- 8 questions total (unless the diff is tiny; then >=3).\n");
     out.push_str("- Cover these categories at least once each: summary, intent, invariants, risk, testing, rollback, alternatives, security.\n");
     out.push_str("- Make questions diff-aware: mention concrete files/functions/behaviors present in the diff.\n");
     out.push_str("- Include at least 3 multiple-choice questions by providing a `choices` array with exactly 4 options (A-D).\n");
