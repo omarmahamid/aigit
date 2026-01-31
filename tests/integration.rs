@@ -28,8 +28,13 @@ fn make_mock_codex(dir: &std::path::Path, fixed_score: f64) -> std::path::PathBu
 set -e
 
 out=""
+schema=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --output-schema)
+      schema="$2"
+      shift 2
+      ;;
     --output-last-message|-o)
       out="$2"
       shift 2
@@ -43,6 +48,30 @@ done
 if [ -z "$out" ]; then
   echo "missing --output-last-message" >&2
   exit 2
+fi
+
+if [ -z "$schema" ]; then
+  echo "missing --output-schema" >&2
+  exit 2
+fi
+
+if grep -q '"title"[[:space:]]*:[[:space:]]*"aigit.Exam"' "$schema"; then
+  cat > "$out" <<'JSON'
+{{
+  "protocol_version": "aigit/0.1",
+  "questions": [
+    {{ "id": "change_summary", "category": "summary", "prompt": "What changed in hello.txt and why?" }},
+    {{ "id": "intent", "category": "intent", "prompt": "Which requirement does adding hello.txt satisfy?" }},
+    {{ "id": "invariants", "category": "invariants", "prompt": "Which invariant must remain true about hello.txt?", "choices": ["It stays plain text", "It becomes JSON", "It contains secrets", "It is deleted"] }},
+    {{ "id": "risk", "category": "risk", "prompt": "What is the most likely risk of this change?", "choices": ["Break scripts reading initial content", "DB migration failure", "Auth outage", "GPU driver crash"] }},
+    {{ "id": "testing", "category": "testing", "prompt": "What testing is appropriate here?" }},
+    {{ "id": "rollback", "category": "rollback", "prompt": "How do you rollback?" }},
+    {{ "id": "alternatives", "category": "alternatives", "prompt": "What alternative approach exists and why not chosen?" }},
+    {{ "id": "security_privacy", "category": "security", "prompt": "Any security/privacy concerns?" }}
+  ]
+}}
+JSON
+  exit 0
 fi
 
 cat > "$out" <<'JSON'
@@ -156,6 +185,15 @@ timeout_secs = 5
     );
     let total = transcript["score"]["total_score"].as_f64().unwrap();
     assert!((total - 0.95).abs() < 1e-9, "expected 0.95, got {total}");
+
+    // Also verify that exam generation is dynamic (comes from codex-cli) and can include choices.
+    let mut packet = assert_cmd::Command::new(assert_cmd::cargo::cargo_bin!("aigit"));
+    packet.current_dir(&dir)
+        .args(["exam", "--format", "json"]);
+    let out = packet.assert().success().get_output().stdout.clone();
+    let packet_json: serde_json::Value = serde_json::from_slice(&out).unwrap();
+    let questions = packet_json["exam"]["questions"].as_array().unwrap();
+    assert!(questions.iter().any(|q| q.get("choices").is_some()));
 }
 
 #[test]

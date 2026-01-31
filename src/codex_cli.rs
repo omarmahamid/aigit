@@ -40,11 +40,24 @@ impl CodexCliRunner {
     }
 
     pub fn run_json_judge(&self, cwd: &Path, prompt: &str) -> Result<String> {
+        self.run_json_with_schema(cwd, prompt, &score_schema_json())
+    }
+
+    pub fn run_json_generate_exam(&self, cwd: &Path, prompt: &str) -> Result<String> {
+        self.run_json_with_schema(cwd, prompt, &exam_schema_json())
+    }
+
+    fn run_json_with_schema(
+        &self,
+        cwd: &Path,
+        prompt: &str,
+        schema: &serde_json::Value,
+    ) -> Result<String> {
         let tmp = tempfile::tempdir().context("failed to create temp dir for codex judge")?;
         let schema_path = tmp.path().join("aigit-codex-judge.schema.json");
         let output_path = tmp.path().join("aigit-codex-judge.output.json");
 
-        std::fs::write(&schema_path, serde_json::to_vec_pretty(&score_schema_json())?)
+        std::fs::write(&schema_path, serde_json::to_vec_pretty(schema)?)
             .with_context(|| format!("failed to write {}", schema_path.display()))?;
 
         let (program, mut args) = split_command_line(&self.base_command)?;
@@ -197,6 +210,40 @@ fn score_schema_json() -> serde_json::Value {
                         "completeness": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
                         "specificity": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
                         "notes": { "type": "array", "items": { "type": "string" } }
+                    }
+                }
+            }
+        }
+    })
+}
+
+fn exam_schema_json() -> serde_json::Value {
+    serde_json::json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "aigit.Exam",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocol_version", "questions"],
+        "properties": {
+            "protocol_version": { "type": "string" },
+            "questions": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 12,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["id", "category", "prompt"],
+                    "properties": {
+                        "id": { "type": "string" },
+                        "category": { "type": "string" },
+                        "prompt": { "type": "string" },
+                        "choices": {
+                            "type": "array",
+                            "minItems": 2,
+                            "maxItems": 6,
+                            "items": { "type": "string" }
+                        }
                     }
                 }
             }

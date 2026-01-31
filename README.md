@@ -55,6 +55,10 @@ timeout_secs = 120
   - `git add -A`
   - `aigit commit -m "message"`
 
+When enabled, Codex CLI will:
+- Generate a diff-aware exam (questions tailored to the actual changes; may include multiple-choice questions).
+- Grade your answers and include feedback in the transcript notes.
+
 ## Hook (optional)
 
 Install a `pre-commit` hook that blocks `git commit` unless it was invoked through `aigit commit`:

@@ -55,6 +55,8 @@ pub struct ExamQuestion {
     pub id: String,
     pub category: String,
     pub prompt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub choices: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,46 +111,54 @@ impl Examiner for StaticExaminer {
                 id: "change_summary".to_string(),
                 category: "summary".to_string(),
                 prompt: "Summarize what changed (concrete files/modules) and why.".to_string(),
+                choices: None,
             },
             ExamQuestion {
                 id: "intent".to_string(),
                 category: "intent".to_string(),
                 prompt: "What user/business requirement does this satisfy?".to_string(),
+                choices: None,
             },
             ExamQuestion {
                 id: "invariants".to_string(),
                 category: "invariants".to_string(),
                 prompt: "What assumptions does this change rely on? What invariants must remain true?"
                     .to_string(),
+                choices: None,
             },
             ExamQuestion {
                 id: "risk".to_string(),
                 category: "risk".to_string(),
                 prompt: "What could break, and where would issues surface first (blast radius)?"
                     .to_string(),
+                choices: None,
             },
             ExamQuestion {
                 id: "testing".to_string(),
                 category: "testing".to_string(),
                 prompt: "What tests were run? Which should exist? What coverage is missing?".to_string(),
+                choices: None,
             },
             ExamQuestion {
                 id: "rollback".to_string(),
                 category: "rollback".to_string(),
                 prompt: "How would you rollback/revert/mitigate if this change causes problems?"
                     .to_string(),
+                choices: None,
             },
             ExamQuestion {
                 id: "alternatives".to_string(),
                 category: "alternatives".to_string(),
                 prompt: "What alternative approach was considered, and why was it rejected?"
                     .to_string(),
+                choices: None,
             },
             ExamQuestion {
                 id: "security_privacy".to_string(),
                 category: "security".to_string(),
                 prompt: "Any security/privacy concerns (auth/authz, PII, secrets, data access)? If not relevant, explain why."
                     .to_string(),
+                choices: None,
             },
         ];
         Ok(Exam {
@@ -251,7 +261,29 @@ impl CodexCliExaminer {
 
 impl Examiner for CodexCliExaminer {
     fn generate_exam(&self, ctx: &ExamContext) -> Result<Exam> {
-        StaticExaminer::new().generate_exam(ctx)
+        let prompt = build_codex_cli_generate_exam_prompt(ctx);
+        let raw = self
+            .runner
+            .run_json_generate_exam(&ctx.workdir, &prompt)?;
+
+        let mut exam: Exam = serde_json::from_str(&raw)?;
+        if exam.protocol_version.trim().is_empty() {
+            exam.protocol_version = "aigit/0.1".to_string();
+        }
+        // Basic sanity: unique ids.
+        let mut ids = std::collections::BTreeSet::new();
+        for q in &exam.questions {
+            if q.id.trim().is_empty() {
+                return Err(anyhow::anyhow!("codex exam question id is empty"));
+            }
+            if !ids.insert(q.id.clone()) {
+                return Err(anyhow::anyhow!(
+                    "codex exam contains duplicate question id: {}",
+                    q.id
+                ));
+            }
+        }
+        Ok(exam)
     }
 
     fn grade_exam(&self, ctx: &ExamContext, exam: &Exam, answers: &Answers) -> Result<Score> {
@@ -389,5 +421,34 @@ fn build_codex_cli_judge_prompt(ctx: &ExamContext, exam: &Exam, answers: &Answer
         out.push_str(a);
         out.push('\n');
     }
+    out
+}
+
+fn build_codex_cli_generate_exam_prompt(ctx: &ExamContext) -> String {
+    let mut out = String::new();
+    out.push_str("You generate a git \"Proof-of-Understanding\" exam tailored to a specific diff.\n");
+    out.push_str("Use ONLY the provided context; do not run commands, read files, or assume details not present.\n");
+    out.push_str("Return ONLY a JSON object matching the provided JSON Schema.\n\n");
+
+    out.push_str("Requirements:\n");
+    out.push_str("- 8 questions total (unless the diff is tiny; then >=4).\n");
+    out.push_str("- Cover these categories at least once each: summary, intent, invariants, risk, testing, rollback, alternatives, security.\n");
+    out.push_str("- Make questions diff-aware: mention concrete files/functions/behaviors present in the diff.\n");
+    out.push_str("- Include at least 3 multiple-choice questions by providing a `choices` array with 4 options.\n");
+    out.push_str("- Multiple-choice questions should be answerable with A/B/C/D.\n");
+    out.push_str("- At least one question should probe an alternative approach and ask why it was not chosen.\n\n");
+
+    out.push_str("changed_files:\n");
+    for f in &ctx.changed_files {
+        out.push_str("- ");
+        out.push_str(f);
+        out.push('\n');
+    }
+    out.push('\n');
+
+    out.push_str("diff_redacted (may be truncated):\n");
+    out.push_str("-----\n");
+    out.push_str(&ctx.diff);
+    out.push_str("\n-----\n");
     out
 }

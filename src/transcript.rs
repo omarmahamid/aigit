@@ -37,13 +37,42 @@ impl Answers {
         println!("aigit exam: answer the following questions.\n");
         for q in &exam.questions {
             println!("--- [{}] {} ---", q.category, q.prompt);
-            println!("(end your answer with a single '.' on its own line)\n");
-            let text = read_multiline_until_dot()?;
+            let text = if let Some(choices) = &q.choices {
+                if choices.is_empty() {
+                    println!("(end your answer with a single '.' on its own line)\n");
+                    read_multiline_until_dot()?
+                } else {
+                println!("(choose one: A/B/C/D; or type the full text)\n");
+                for (idx, c) in choices.iter().enumerate() {
+                    let letter = match idx {
+                        0 => "A",
+                        1 => "B",
+                        2 => "C",
+                        3 => "D",
+                        4 => "E",
+                        _ => "?",
+                    };
+                    println!("  {letter}) {c}");
+                }
+                read_single_line()?
+                }
+            } else {
+                println!("(end your answer with a single '.' on its own line)\n");
+                read_multiline_until_dot()?
+            };
             answers.insert(q.id.clone(), text);
             println!();
         }
         Ok(Self { answers })
     }
+}
+
+fn read_single_line() -> Result<String> {
+    use std::io::BufRead;
+    let stdin = std::io::stdin();
+    let mut line = String::new();
+    stdin.lock().read_line(&mut line)?;
+    Ok(line.trim_end().to_string())
 }
 
 fn read_multiline_until_dot() -> Result<String> {
