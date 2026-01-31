@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 
-use crate::cli::{Cli, Commands, ConfigCmd, PolicyCmd};
+use crate::cli::{Cli, Commands, ConfigCmd, DashboardCmd, PolicyCmd};
 use crate::git::{Git, GitRepo};
 
 pub(crate) fn run() -> u8 {
@@ -31,6 +31,10 @@ fn try_run() -> Result<u8> {
         Commands::Commit(args) => crate::commands::commit::cmd_commit(&git, args, cli.verbose),
         Commands::Verify(args) => crate::commands::verify::cmd_verify(&git, args, cli.verbose),
         Commands::InstallHook(args) => crate::commands::install_hook::cmd_install_hook(&git, args),
+        Commands::Dashboard(args) => match args.command {
+            DashboardCmd::Export(args) => crate::commands::dashboard::cmd_dashboard_export(&git, args),
+            DashboardCmd::Serve(args) => crate::commands::dashboard::cmd_dashboard_serve(&git, args),
+        },
         Commands::Policy { command } => match command {
             PolicyCmd::Validate => crate::commands::policy::cmd_policy_validate(&git, cli.verbose),
         },

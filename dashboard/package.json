@@ -1,0 +1,12 @@
+{
+  "name": "aigit-dashboard-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Datadog-style web dashboard for aigit transcripts (exported from git notes).",
+  "scripts": {
+    "build": "tsc -p ."
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

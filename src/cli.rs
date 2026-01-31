@@ -25,6 +25,8 @@ pub(crate) enum Commands {
     Verify(VerifyArgs),
     /// Install git hook to enforce using `aigit commit`
     InstallHook(InstallHookArgs),
+    /// Dashboard utilities (export transcripts for the web UI)
+    Dashboard(DashboardArgs),
     /// Policy utilities
     Policy {
         #[command(subcommand)]
@@ -98,6 +100,50 @@ pub(crate) struct InstallHookArgs {
     pub(crate) force: bool,
 }
 
+#[derive(Parser, Debug)]
+pub(crate) struct DashboardArgs {
+    #[command(subcommand)]
+    pub(crate) command: DashboardCmd,
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum DashboardCmd {
+    /// Export transcripts from git notes (ref=aigit) as JSON for the web dashboard
+    Export(DashboardExportArgs),
+    /// Serve the dashboard as a local static site
+    Serve(DashboardServeArgs),
+}
+
+#[derive(Parser, Debug)]
+pub(crate) struct DashboardExportArgs {
+    /// Output path for the exported JSON
+    #[arg(long, default_value = "dashboard/public/data.json")]
+    pub(crate) out: String,
+
+    /// Include full answer text in the export (can be sensitive)
+    #[arg(long, default_value_t = false)]
+    pub(crate) include_answers: bool,
+
+    /// Maximum number of transcripts to export (newest first)
+    #[arg(long)]
+    pub(crate) limit: Option<usize>,
+}
+
+#[derive(Parser, Debug)]
+pub(crate) struct DashboardServeArgs {
+    /// Directory to serve (should contain index.html)
+    #[arg(long, default_value = "dashboard/public")]
+    pub(crate) dir: String,
+
+    /// Host to bind to
+    #[arg(long, default_value = "127.0.0.1")]
+    pub(crate) host: String,
+
+    /// Port to bind to
+    #[arg(long, default_value_t = 5173)]
+    pub(crate) port: u16,
+}
+
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub(crate) enum HookMode {
     PreCommit,
@@ -108,4 +154,3 @@ pub(crate) struct ConfigSetArgs {
     pub(crate) key: String,
     pub(crate) value: String,
 }
-

@@ -3,3 +3,7 @@
 **/*.swp
 **/*.swo
 .DS_Store
+/dashboard/node_modules
+/dashboard/public/dist
+/dashboard/*.tsbuildinfo
+/dashboard/public/data.json

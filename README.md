@@ -159,3 +159,21 @@ Install a `pre-commit` hook that blocks `git commit` unless it was invoked throu
 ```sh
 aigit install-hook --mode pre-commit
 ```
+
+## Dashboard (TypeScript, optional)
+
+This repo includes a Datadog-style TypeScript web dashboard that visualizes transcripts stored in `git notes` (`ref=aigit`).
+
+```sh
+# 1) export transcripts to JSON
+cargo run -- dashboard export --out dashboard/public/data.json --include-answers
+
+# 2) build the frontend
+pnpm -C dashboard install
+pnpm -C dashboard run build
+
+# 3) serve it (Rust)
+cargo run -- dashboard serve --dir dashboard/public --port 5173
+```
+
+Note: `dashboard/public/data.json` may contain sensitive answer text; it is gitignored by default.
